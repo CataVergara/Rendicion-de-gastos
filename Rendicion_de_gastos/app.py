@@ -1,9 +1,9 @@
 import streamlit as st
 from infraestructura.base_datos import RepositorioRendicionMemory
 from aplicacion.flujos import CasoUsoRendicion
-from interfaz import rendidor, revision, tesoreria
+from interfaz import rendidor, revision, gerencia, tesoreria
 
-# Configuración inicial de la página
+# Configuración inicial de la página (Mantenemos layout="wide" para dar espacio a las tablas y formularios)
 st.set_page_config(page_title="FinTrack Pro", layout="wide")
 
 repositorio = RepositorioRendicionMemory()
@@ -81,15 +81,24 @@ if st.session_state.usuario_autenticado is None:
                 else:
                     st.error("Credenciales incorrectas.")
 
-# SI EL USUARIO YA INGRESÓ: Limpiamos la pantalla y cargamos los roles
+# SI EL USUARIO YA INGRESÓ: Limpiamos la pantalla y cargamos los roles de manera dinámica
 else:
+    # Removemos los elementos de fondo del login para dejar libre el área de trabajo limpia
+    st.markdown("""
+        <style>
+        [data-testid="stHorizontalBlock"] { background-color: transparent !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
+        .stApp { background-image: none !important; background-color: #f8fafc !important; }
+        .stApp::before { display: none !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
     user_logueado = st.session_state.usuario_autenticado
     
     st.sidebar.markdown(f"""
         <div style='padding: 10px 0px;'>
-            <h2 style='color: #0f172a; margin:0; font-size:22px; font-weight:800;'>FinTrack Pro</h2>
-            <p style='color: #64748b; font-size:12px; margin:0;'>Usuario: {user_logueado['nombre']}</p>
-            <span style='background-color: #1e3a8a; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;'>{user_logueado['rol']}</span>
+            <h2 style='color: #ffffff; margin:0; font-size:22px; font-weight:800;'>FinTrack Pro</h2>
+            <p style='color: #bfdbfe; font-size:12px; margin:0;'>Usuario: {user_logueado['nombre']}</p>
+            <span style='background-color: #2563eb; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;'>{user_logueado['rol']}</span>
         </div>
     """, unsafe_allow_html=True)
     st.sidebar.divider()
@@ -98,9 +107,12 @@ else:
         st.session_state.usuario_autenticado = None
         st.rerun()
 
+    # Sistema de Enrutamiento Técnico por Roles (Actualizado para Fase 2)
     if user_logueado["rol"] == "Rendidor":
         rendidor.renderizar_vista(repositorio, caso_uso, user_logueado)
     elif user_logueado["rol"] == "Bandeja Auditoria":
         revision.renderizar_vista(repositorio, caso_uso)
+    elif user_logueado["rol"] == "Gerencia Finanzas": # Nueva compuerta para excepciones de la Fase 2 
+        gerencia.renderizar_vista(repositorio, caso_uso)
     elif user_logueado["rol"] == "Cierre Tesoreria":
         tesoreria.renderizar_vista(repositorio, caso_uso)

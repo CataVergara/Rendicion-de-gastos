@@ -1,7 +1,7 @@
 import streamlit as st
+from datetime import date
 
 def renderizar_vista(repositorio, caso_uso, usuario_activo):
-    # Inicializar llaves de sesión para edición si no existen
     if "gasto_editar_id" not in st.session_state:
         st.session_state.gasto_editar_id = None
         st.session_state.val_rut = ""
@@ -11,231 +11,143 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
 
     st.markdown("""
         <style>
-        /* 1. Fondo general claro para la mesa de trabajo */
-        .stApp { 
-            background-image: none !important; 
-            background-color: #f8fafc !important; 
-        }
-        .stApp::before { display: none !important; }
+        [data-testid="stSidebar"] { background-color: #1e3a8a !important; }
+        [data-testid="stSidebar"] * { color: white !important; }
+        .ft-max-width-container { max-width: 900px; margin: 0 auto; }
         
-        /* 2. BARRA LATERAL AZUL CÁLIDO PROFESIONAL */
-        [data-testid="stSidebar"] {
-            background-color: #1e3a8a !important; 
-            border-right: 1px solid #172554 !important;
-        }
-        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-            color: #ffffff !important; 
-            font-weight: 700 !important;
-        }
-        [data-testid="stSidebar"] p {
-            color: #bfdbfe !important; 
-            font-weight: 500 !important;
-        }
-        [data-testid="stSidebar"] button {
-            background-color: #2563eb !important;
-            color: #ffffff !important;
-            border: 1px solid #3b82f6 !important;
-            border-radius: 6px !important;
-        }
-        [data-testid="stSidebar"] button:hover {
-            background-color: #ef4444 !important;
-            border-color: #f87171 !important;
-        }
-
-        /* 3. ALINEACIÓN GENERAL DEL CONTENIDO CENTRAL */
-        .ft-max-width-container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        
-        /* 4. DEGRADADO EN LA TARJETA */
-        [data-testid="stVerticalBlockBorderWrapper"], 
-        [data-testid="stVerticalBlockBorderWrapper"] > div,
-        div[data-linejoin="true"] {
+        [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stVerticalBlockBorderWrapper"] > div {
             background: linear-gradient(135deg, #ffffff 30%, #cbd5e1 100%) !important;
             border-radius: 14px !important;
         }
-        
-        [data-testid="stVerticalBlockBorderWrapper"] {
-            border: 1px solid #cbd5e1 !important;
-            box-shadow: 0 10px 20px -3px rgba(15, 23, 42, 0.1) !important;
-            padding: 25px !important;
-        }
-        
         input, select, div[role="combobox"] button, .stNumberInput div {
-            background-color: #ffffff !important;
-            color: #0f172a !important;
-            border: 1px solid #94a3b8 !important;
-            border-radius: 6px !important;
-            height: 40px !important;
+            background-color: #ffffff !important; color: #0f172a !important;
+            border: 1px solid #94a3b8 !important; border-radius: 6px !important; height: 40px !important;
         }
+        [data-testid="stWidgetLabel"] p, label { color: #0f172a !important; font-weight: 700 !important; }
+        .header-card { background-color: #ffffff; padding: 22px 30px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
         
-        input {
-            color: #0f172a !important;
-            -webkit-text-fill-color: #0f172a !important;
-        }
-        
-        [data-testid="stFileUploadDropzone"] {
-            background-color: #ffffff !important;
-            border: 2px dashed #94a3b8 !important;
-            border-radius: 6px !important;
-        }
-
-        [data-testid="stWidgetLabel"] p, label, .stMarkdown p {
-            color: #0f172a !important;
-            font-weight: 700 !important;
-        }
-        
-        .header-card {
-            background-color: #ffffff;
-            padding: 22px 30px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            margin-bottom: 20px;
-        }
-        
-        .btn-azul-submit button {
-            background-color: #1e3a8a !important;
-            color: #ffffff !important;
-            border-radius: 6px !important;
-            padding: 14px 0px !important;
-            font-weight: 700 !important;
-            height: auto !important;
-            border: none !important;
-            margin-top: 15px !important;
-            box-shadow: 0 4px 12px rgba(30, 58, 138, 0.2) !important;
-        }
-        .btn-azul-submit button:hover {
-            background-color: #0f172a !important;
-        }
+        .btn-enviar button { background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 700 !important; }
+        .btn-borrador button { background-color: #ffffff !important; color: #475569 !important; border: 1px solid #cbd5e1 !important; font-weight: 700 !important; }
+        .btn-borrador button:hover { background-color: #f1f5f9 !important; }
         </style>
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="ft-max-width-container">', unsafe_allow_html=True)
 
-    # Encabezado dinámico
-    titulo_acc = "Corregir Rendición de Gastos" if st.session_state.gasto_editar_id else "Módulo de Rendición de Gastos"
-    sub_acc = f"Modificando Folio Rechazado: {st.session_state.val_folio}" if st.session_state.gasto_editar_id else "Carga técnica de evidencias, categorización y metadatos financieros."
-
-    st.markdown(f"""
+    st.markdown("""
         <div class="header-card">
-            <h2 style="color: #1e3a8a; font-size: 22px; font-weight: 800; margin: 0;">{titulo_acc}</h2>
-            <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">{sub_acc}</p>
+            <h2 style="color: #1e3a8a; font-size: 22px; font-weight: 800; margin: 0;">Módulo de Rendición de Gastos</h2>
+            <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">Ingreso técnico de metadatos con persistencia y matriz de trazabilidad.</p>
         </div>
     """, unsafe_allow_html=True)
     
-    # Formulario compacto
     with st.container(border=True):
-        st.markdown('<p style="font-size: 13px; letter-spacing: 0.5px; color: #475569 !important; font-weight: 800; margin-top: 5px; margin-bottom: 15px;">DATOS SOLICITADOS DEL COMPROBANTE</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 13px; font-weight: 800; color: #475569;">DATOS SOLICITADOS DEL COMPROBANTE</p>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
             input_rut = st.text_input("RUT Emisor", value=st.session_state.val_rut, placeholder="76.xxx.xxx-x")
             input_folio = st.text_input("Número de Folio / Boleta", value=st.session_state.val_folio, placeholder="Ej: 00412")
+            input_fecha = st.date_input("Fecha de Emisión del Documento", value=date.today())
         with col2:
             input_monto = st.number_input("Monto Total Documento ($)", value=st.session_state.val_monto, min_value=0, step=1000)
-            input_just = st.text_input("Justificación Comercial / Motivo", value=st.session_state.val_just, placeholder="Ej: Compra de insumos TI")
+            input_just = st.text_input("Justificación Comercial / Motivo", value=st.session_state.val_just, placeholder="Ej: Insumos TI")
+            categoria = st.selectbox("Categoría de Clasificación", ["Seleccione una categoría...", "Logística y Transportes", "Alimentación y Viáticos", "Materiales e Insumos TI", "Licencias y Servicios Cloud"])
             
-        col3, col4 = st.columns(2)
-        with col3:
-            categoria = st.selectbox(
-                "Categoría de Clasificación",
-                ["Seleccione una categoría...", "Logística y Transportes", "Alimentación y Viáticos", "Materiales e Insumos TI", "Licencias y Servicios Cloud"]
-            )
-        with col4:
-            st.markdown("<p style='font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;'>Evidencia Digital Adjunta</p>", unsafe_allow_html=True)
-            archivo_cargado = st.file_uploader("Subir comprobante", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed")
+        st.markdown("<p style='font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;'>Evidencia Digital Adjunta</p>", unsafe_allow_html=True)
+        archivo_cargado = st.file_uploader("Subir comprobante", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed")
             
-        st.markdown('<div class="btn-azul-submit">', unsafe_allow_html=True)
-        texto_boton = "Re-enviar a Auditoría" if st.session_state.gasto_editar_id else "Enviar a Flujo de Aprobación"
-        btn_enviar = st.button(texto_boton, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        # FILA DE ACCIONES DOBLE: Enviar vs Guardar Borrador
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.markdown('<div class="btn-enviar">', unsafe_allow_html=True)
+            btn_enviar = st.button("Enviar a Flujo de Aprobación", use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col_btn2:
+            st.markdown('<div class="btn-borrador">', unsafe_allow_html=True)
+            btn_borrador = st.button("Guardar como Borrador", use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    if btn_enviar:
-        if archivo_cargado is None:
-            st.error("Error obligatorio: Debe adjuntar el archivo o la nueva captura legible.")
+    # Lógica de procesamiento de acciones
+    if btn_enviar or btn_borrador:
+        dias_antiguedad = (date.today() - input_fecha).days
+        
+        if btn_enviar and archivo_cargado is None:
+            st.error("Error obligatorio: Debe adjuntar la evidencia digital para enviar a revisión.")
         elif categoria == "Seleccione una categoría...":
-            st.error("Error: Seleccione la categoría correspondiente.")
+            st.error("Error: Clasifique el gasto en una categoría válida.")
+        elif repositorio.verificar_duplicado(input_rut, input_folio) and not st.session_state.gasto_editar_id:
+            st.error("❌ Excepción E4: La combinación de RUT Emisor + Número de Folio ya existe en el sistema.")
         elif not input_rut or not input_folio or input_monto <= 0:
-            st.error("Error: Complete los metadatos requeridos.")
+            st.error("Error: Complete todos los campos.")
         else:
             justificacion_completa = f"[{categoria}] {input_just}"
+            requiere_g = True if input_monto > 500000 else False
             
+            # Determinación determinista del estado según la acción gatillada
+            if btn_borrador:
+                estado_inicial = "Borrador"
+            else:
+                estado_inicial = "Borrador" if dias_antiguedad > 30 else "Pendiente"
+
             if st.session_state.gasto_editar_id:
+                # Actualización de registro existente
                 g_id = st.session_state.gasto_editar_id
-                # Buscamos y actualizamos de forma segura asegurando la llave usuario_id
                 for r in repositorio.obtener_todas():
                     if r["id"] == g_id:
-                        r["rut"] = input_rut
-                        r["folio"] = input_folio
-                        r["monto"] = input_monto
-                        r["justificacion"] = justificacion_completa
-                        r["estado"] = "Pendiente"
-                        r["usuario_id"] = usuario_activo["id"] # <--- FIJAR ID AQUÍ PARA EVITAR EL KEYERROR
-                        if "comentario_auditoria" in r: 
-                            del r["comentario_auditoria"]
-                
-                st.success("¡Rendición corregida y re-enviada con éxito!")
+                        origen = r["estado"]
+                        r.update({"rut": input_rut, "folio": input_folio, "monto": input_monto, "justificacion": justificacion_completa, "estado": estado_inicial, "requiere_gerencia": requiere_g})
+                        repositorio.registrar_log(g_id, usuario_activo["nombre"], origen, estado_inicial)
                 st.session_state.gasto_editar_id = None
-                st.session_state.val_rut = ""; st.session_state.val_folio = ""; st.session_state.val_monto = 0; st.session_state.val_just = ""
+                st.success("Rendición actualizada.")
                 st.rerun()
             else:
-                # Flujo normal de creación
-                resultado = caso_uso.registrar_gasto(usuario_activo["nombre"], input_rut, input_folio, input_monto, justificacion_completa)
-                if resultado["success"]:
-                    # Asegurar de forma explícita que el nuevo registro herede el id activo antes de renderizar
-                    repositorio.obtener_todas()[-1]["usuario_id"] = usuario_activo["id"]
-                    st.success("Rendición cargada con éxito.")
-                    st.rerun()
+                # Creación de nuevo registro
+                nuevo_id = len(repositorio.obtener_todas()) + 1
+                nueva_rendicion = {
+                    "id": nuevo_id, "usuario_id": usuario_activo["id"], "usuario": usuario_activo["nombre"],
+                    "rut": input_rut, "folio": input_folio, "monto": input_monto,
+                    "justificacion": justificacion_completa, "estado": estado_inicial,
+                    "requiere_gerencia": requiere_g, "fecha_documento": str(input_fecha)
+                }
+                repositorio.obtener_todas().append(nueva_rendicion)
+                repositorio.registrar_log(nuevo_id, usuario_activo["nombre"], "Ninguno", estado_inicial)
+                st.success("Rendición guardada correctamente.")
+                st.rerun()
 
-    # Historial de Rendiciones Recientes de forma ultra-segura contra KeyErrors
-    st.markdown("<br><h3 style='color:#1e3a8a; font-weight:800; font-size:18px; margin-bottom: 12px;'>Mis Rendiciones Recientes</h3>", unsafe_allow_html=True)
+    # Historial Renderizado con Línea de Trazabilidad (Logs)
+    st.markdown("<br><h3 style='color:#1e3a8a; font-weight:800; font-size:18px;'>Mis Rendiciones Recientes</h3>", unsafe_allow_html=True)
+    mis_gastos = [g for g in repositorio.obtener_todas() if g.get('usuario_id') == usuario_activo['id']]
     
-    # Filtramos la lista capturando excepciones por si quedó algún registro corrupto flotando en la sesión
-    todas_r = repositorio.obtener_todas()
-    mis_gastos = [g for g in todas_r if g.get('usuario_id') == usuario_activo['id']]
-    
-    if not mis_gastos:
-        st.markdown("<p style='color:#64748b; font-size:14px; font-style:italic;'>No registra documentos ingresados.</p>", unsafe_allow_html=True)
-    else:
-        for g in mis_gastos:
-            # Seleccionar color de badge según estado
-            estado_g = g.get('estado', 'Pendiente')
-            if estado_g == 'Observado':
-                bg_badge, font_badge = '#fef3c7', '#d97706'
-            elif estado_g in ['Autorizado', 'Aprobado Analista', 'Pagado']:
-                bg_badge, font_badge = '#d1fae5', '#065f46'
-            else:
-                bg_badge, font_badge = '#e0f2fe', '#0369a1'
+    for g in mis_gastos:
+        estado_g = g['estado']
+        if estado_g == 'Observado': bg_b, ft_b = '#fef3c7', '#d97706'
+        elif estado_g in ['Autorizado', 'Pagado', 'Aprobado Analista', 'Autorizado - Pendiente de Fondos']: bg_b, ft_b = '#d1fae5', '#065f46'
+        elif estado_g == 'Borrador': bg_b, ft_b = '#fee2e2', '#991b1b'
+        else: bg_b, ft_b = '#e0f2fe', '#0369a1'
 
-            st.markdown(f"""
-                <div style='background-color: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);'>
-                    <span style='float: right; background-color: {bg_badge}; color: {font_badge}; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold;'>{estado_g}</span>
-                    <strong style='color:#0f172a; font-size:15px;'>Folio: {g.get('folio', 'S/F')}</strong> <br/>
-                    <span style='color:#334155; font-size:14px; display:inline-block; margin-top:4px;'>{g.get('justificacion', '')}</span><br/>
-            """, unsafe_allow_html=True)
-            
-            if estado_g == 'Observado' and g.get("comentario_auditoria"):
-                st.markdown(f"""
-                    <div style="background-color: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin: 8px 0; color: #b45309; font-size: 13px;">
-                        <strong>⚠️ Comentario de Auditoría:</strong> {g['comentario_auditoria']}
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                if st.button(f"Corregir Folio {g.get('folio')}", key=f"corr_{g.get('id')}"):
-                    st.session_state.gasto_editar_id = g.get('id')
-                    st.session_state.val_rut = g.get('rut', '')
-                    st.session_state.val_folio = g.get('folio', '')
-                    st.session_state.val_monto = g.get('monto', 0)
-                    just_raw = g.get('justificacion', '')
-                    st.session_state.val_just = just_raw.split(']')[-1].strip() if ']' in just_raw else just_raw
-                    st.rerun()
+        st.markdown(f"""
+            <div style='background-color: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;'>
+                <span style='float: right; background-color: {bg_b}; color: {ft_b}; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold;'>{estado_g}</span>
+                <strong>Folio: {g['folio']}</strong> | Monto: ${g['monto']:,} | Emisión: {g['fecha_documento']}<br/>
+                <span style='color:#334155; font-size:14px;'>{g['justificacion']}</span>
+        """, unsafe_allow_html=True)
+        
+        if estado_g == 'Observado' and g.get("comentario_auditoria"):
+            st.markdown(f'<div style="background-color: #fffbeb; padding: 10px; border-radius: 6px; margin: 8px 0; color: #b45309; font-size: 13px;">⚠️ <strong>Reparo Analista:</strong> {g["comentario_auditoria"]}</div>', unsafe_allow_html=True)
+            if st.button(f"Corregir Folio {g['folio']}", key=f"corr_{g['id']}"):
+                st.session_state.gasto_editar_id = g['id']
+                st.session_state.val_rut = g['rut']
+                st.session_state.val_folio = g['folio']
+                st.session_state.val_monto = g['monto']
+                st.session_state.val_just = g['justificacion'].split(']')[-1].strip()
+                st.rerun()
 
-            st.markdown(f"""
-                    <hr style='border: 0; border-top: 1px solid #f1f5f9; margin: 10px 0;'>
-                    <span style='color: #64748b; font-size: 13px;'>Monto Operación: ${g.get('monto', 0):,} | RUT Emisor: {g.get('rut', '')}</span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-    st.markdown('</div>', unsafe_allow_html=True)
+        # TRAZABILIDAD DINÁMICA: Renderizado de la Entidad Log Evento al fondo de la tarjeta
+        logs_g = repositorio.obtener_logs_por_rendicion(g['id'])
+        if logs_g:
+            st.markdown("<p style='margin: 8px 0 2px 0; font-size: 11px; color: #94a3b8; font-weight:800;'>HISTORIAL DE TRAZABILIDAD (LOGS):</p>", unsafe_allow_html=True)
+            for log in logs_g:
+                st.markdown(f"<p style='margin:0; font-size:11px; color:#64748b; font-family:monospace;'>• [{log['timestamp']}] Usuario '{log['autor']}' cambió estado de <strong>{log['estado_origen']}</strong> a <strong>{log['estado_destino']}</strong></p>", unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
