@@ -36,9 +36,9 @@ def renderizar_vista(repositorio, caso_uso):
 
             # Cartel de aviso exclusivo para consistencia con la Sección 13 del informe
             if viene_de_gerencia:
-                st.warning("ℹ️ **Control Jerárquico:** Este documento ya posee la firma digital de aprobación de la Gerencia de Finanzas por Alta Cuantía. Proceda con la auditoría técnica de la evidencia.")
+                st.warning("ℹ **Control Jerárquico:** Este documento ya posee la firma digital de aprobación de la Gerencia de Finanzas por Alta Cuantía. Proceda con la auditoría técnica de la evidencia.")
 
-            with st.expander(f"🔍 Ver Evidencia Digital Adjunta (Folio {g['folio']})"):
+            with st.expander(f" Ver Evidencia Digital Adjunta (Folio {g['folio']})"):
                 st.code(f"*** OCR READ ***\nRUT EMISOR: {g['rut']}\nFOLIO: {g['folio']}\nTOTAL: ${g['monto']:,}\nSTATUS: INTEGRIDAD VERIFICADA HASH SHA-256", language="text")
 
             comentario_obs = st.text_input("Motivo del Reparo Técnico (Obligatorio para observar)", key=f"txt_obs_{g['id']}", placeholder="Ej: Imagen borrosa o datos dispares.")

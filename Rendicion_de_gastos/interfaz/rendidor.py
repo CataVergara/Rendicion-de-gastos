@@ -124,7 +124,7 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
         if estado_g == 'Observado': bg_b, ft_b = '#fef3c7', '#d97706'
         elif estado_g in ['Autorizado', 'Pagado', 'Aprobado Analista', 'Autorizado - Pendiente de Fondos']: bg_b, ft_b = '#d1fae5', '#065f46'
         elif estado_g == 'Borrador': bg_b, ft_b = '#fee2e2', '#991b1b'
-        else: bg_b, ft_b = '#e0f2fe', '#0369a1'
+        else: bg_b, ft_b = "#3b80ad", '#0369a1'
 
         st.markdown(f"""
             <div style='background-color: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;'>

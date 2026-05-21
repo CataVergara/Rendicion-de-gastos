@@ -99,7 +99,7 @@ def renderizar_vista(repositorio, caso_uso):
                         if r['id'] == g['id']:
                             r['requiere_gerencia'] = False
                             
-                    st.success(f"✅ Folio {g['folio']} visado con éxito. Derivado a Auditoría Técnica.")
+                    st.success(f" Folio {g['folio']} visado con éxito. Derivado a Auditoría Técnica.")
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
                 
@@ -107,7 +107,7 @@ def renderizar_vista(repositorio, caso_uso):
                 st.markdown('<div class="btn-rechazar">', unsafe_allow_html=True)
                 if st.button(f"Rechazo Definitivo", key=f"rech_ger_{g['id']}", use_container_width=True):
                     repositorio.actualizar_estado(g['id'], "Rechazado", "Gerente de Finanzas")
-                    st.error(f"❌ Folio {g['folio']} ha sido rechazado de forma definitiva.")
+                    st.error(f" Folio {g['folio']} ha sido rechazado de forma definitiva.")
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
                 
