@@ -3,7 +3,7 @@ from infraestructura.base_datos import RepositorioRendicionMemory
 from aplicacion.flujos import CasoUsoRendicion
 from interfaz import rendidor, revision, gerencia, tesoreria
 
-# Configuración inicial de la página (Mantenemos layout="wide" para dar espacio a las tablas y formularios)
+# Configuración inicial de la página
 st.set_page_config(page_title="FinTrack Pro", layout="wide")
 
 repositorio = RepositorioRendicionMemory()
@@ -12,7 +12,7 @@ caso_uso = CasoUsoRendicion(repositorio)
 if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
 
-# SINO HAY USUARIO: Aplicamos el CSS exclusivo de la tarjeta de Login
+# SI NO HAY USUARIO: Aplicamos el CSS exclusivo de la tarjeta de Login
 if st.session_state.usuario_autenticado is None:
     st.markdown("""
         <style>
@@ -50,9 +50,39 @@ if st.session_state.usuario_autenticado is None:
             border-radius: 30px !important; border: 2px solid #0f172a !important; padding: 12px 20px !important;        
             background-color: #ffffff !important; color: #0f172a !important;
         }
-        .stButton>button {
-            background-color: #0f172a !important; color: #ffffff !important; border-radius: 30px !important;
-            padding: 12px 30px !important; font-weight: 700 !important; width: 100% !important; margin-top: 15px !important;
+        
+        /* --- ESTILO DEL BOTÓN CON INVERSIÓN CORPORATIVA EN HOVER --- */
+        div[data-testid="stFormSubmitButton"] > button {
+            background-color: #0f172a !important; 
+            color: #ffffff !important; 
+            border-radius: 30px !important;
+            border: 2px solid #0f172a !important; /* Borde oscuro inicial */
+            padding: 12px 30px !important; 
+            font-weight: 700 !important; 
+            width: 100% !important; 
+            margin-top: 15px !important;
+            transition: all 0.25s ease-in-out !important; /* Suaviza la inversión de colores */
+        }
+        
+        /* Efecto Hover: Fondo blanco, texto azul marino y borde azul marino */
+        div[data-testid="stFormSubmitButton"] > button:hover {
+            background-color: #ffffff !important;
+            color: #1e3a8a !important;
+            border-color: #1e3a8a !important;
+        }
+        
+        /* Efecto Al Hacer Click (Active) */
+        div[data-testid="stFormSubmitButton"] > button:active {
+            background-color: #1e3a8a !important;
+            color: #ffffff !important;
+            border-color: #1e3a8a !important;
+        }
+
+        /* Mantiene el diseño si el botón queda seleccionado/enfocado */
+        div[data-testid="stFormSubmitButton"] > button:focus:not(:active) {
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+            border-color: #0f172a !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -112,7 +142,7 @@ else:
         rendidor.renderizar_vista(repositorio, caso_uso, user_logueado)
     elif user_logueado["rol"] == "Bandeja Auditoria":
         revision.renderizar_vista(repositorio, caso_uso)
-    elif user_logueado["rol"] == "Gerencia Finanzas": # Nueva compuerta para excepciones de la Fase 2 
+    elif user_logueado["rol"] == "Gerencia Finanzas": 
         gerencia.renderizar_vista(repositorio, caso_uso)
     elif user_logueado["rol"] == "Cierre Tesoreria":
         tesoreria.renderizar_vista(repositorio, caso_uso)
