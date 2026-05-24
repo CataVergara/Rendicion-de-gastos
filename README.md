@@ -30,7 +30,7 @@ Utiliza los siguientes usuarios para simular los distintos roles del flujo de tr
 | --- | --- | --- |
 | **francisco** | `123` | Colaborador / Rendidor |
 | **catalina** | `123` | Analista de Finanzas / Auditor Técnico |
-| **gerencia** | `123` | Gerente de Finanzas (Aprobador Jerárquico) |
+| **gerente** | `123` | Gerente de Finanzas (Aprobador Jerárquico) |
 | **tesorero** | `123` | Tesorero Liquidador |
 
 ---
