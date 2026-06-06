@@ -1,34 +1,20 @@
-from dominio.reglas import ReglasNegocioFinancieras
+# =====================================================================
+# CAPA DE APLICACIÓN: CASOS DE USO DE RENDICIÓN
+# =====================================================================
 
 class CasoUsoRendicion:
     def __init__(self, repositorio):
-        self.repo = repositorio
+        """
+        Clase de la capa de Aplicación que coordina las operaciones de negocio
+        del sistema de FinTrack Pro, delegando la persistencia de datos 
+        en el repositorio inyectado (Firestore).
+        """
+        self.repositorio = repositorio
 
-    def registrar_gasto(self, usuario: str, rut: str, folio: str, monto: float, justificacion: str):
-        if not ReglasNegocioFinancieras.validar_campos_obligatorios(rut, folio, monto):
-            return {"success": False, "msg": "Error: Campos obligatorios vacíos o monto inválido."}
-        
-        if self.repo.verificar_duplicado(rut, folio):
-            return {"success": False, "msg": "Excepción E4: Este documento tributario ya ha sido registrado."}
-            
-        requiere_g = ReglasNegocioFinancieras.requiere_aprobacion_gerencia(monto)
-        
-        nueva_rendicion = {
-            "id": self.repo.obtener_siguiente_id(),
-            "usuario": usuario,
-            "rut": rut,
-            "folio": folio,
-            "monto": monto,
-            "justificacion": justificacion,
-            "estado": "Pendiente",
-            "requiere_gerencia": requiere_g
-        }
-        
-        self.repo.guardar(nueva_rendicion)
-        
-        if requiere_g:
-            return {"success": True, "msg": "Rendición ingresada. BR-05: Requiere flag de aprobación por Gerencia."}
-        return {"success": True, "msg": "Rendición ingresada y enviada a revisión con éxito."}
+    def obtener_flujo_completo(self):
+        """Retorna todas las rendiciones vigentes desde la base de datos."""
+        return self.repositorio.obtener_todas()
 
-    def actualizar_estado_gasto(self, gasto_id: int, nuevo_estado: str):
-        self.repo.actualizar_estado(gasto_id, nuevo_estado)
+    def procesar_cambio_estado(self, gasto_id: int, nuevo_estado: str, autor: str):
+        """Coordina el cambio de estado de una rendición aplicando la trazabilidad."""
+        self.repositorio.actualizar_estado(gasto_id, nuevo_estado, autor)

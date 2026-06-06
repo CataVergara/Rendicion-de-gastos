@@ -1,68 +1,156 @@
 import streamlit as st
 from datetime import datetime
+import hashlib  # Librería nativa para aplicar hashing criptográfico
+import firebase_admin
+from firebase_admin import credentials, firestore
 
-class RepositorioRendicionMemory:
+# =====================================================================
+# INTERCEPTORES DE CAMBIOS AUTOMÁTICOS PARA FIRESTORE
+# =====================================================================
+
+class TrackedDict(dict):
+    """Diccionario inteligente que detecta cambios internos y los sincroniza en tiempo real con Firestore."""
+    def __init__(self, data, db, doc_id):
+        super().__init__(data)
+        self.db = db
+        self.doc_id = str(doc_id)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.db.collection("rendiciones").document(self.doc_id).set({key: value}, merge=True)
+
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        self.db.collection("rendiciones").document(self.doc_id).set(dict(self), merge=True)
+
+
+class TrackedList(list):
+    """Lista inteligente que detecta operaciones .append() y registra el nuevo documento en Firestore."""
+    def __init__(self, data, db):
+        super().__init__(data)
+        self.db = db
+
+    def append(self, item):
+        doc_id = str(item.get("id"))
+        tracked_item = TrackedDict(item, self.db, doc_id)
+        super().append(tracked_item)
+        self.db.collection("rendiciones").document(doc_id).set(item)
+
+
+# =====================================================================
+# REPOSITORIO DE PRODUCCIÓN CON CLOUD FIRESTORE (AUTO-MIGRABLE)
+# =====================================================================
+
+class RepositorioRendicionFirestore:
     def __init__(self):
-        if 'db_usuarios' not in st.session_state:
-            st.session_state.db_usuarios = [
-                {"id": 1, "username": "francisco", "password": "123", "nombre": "Francisco Benavides", "rol": "Rendidor"},
-                {"id": 2, "username": "catalina", "password": "123", "nombre": "Catalina Vergara", "rol": "Bandeja Auditoria"},
-                {"id": 3, "username": "gerente", "password": "123", "nombre": "Gerente de Finanzas", "rol": "Gerencia Finanzas"},
-                {"id": 4, "username": "tesorero", "password": "123", "nombre": "Tesorero Liquidador", "rol": "Cierre Tesoreria"}
-            ]
+        # 1. Inicialización segura de Firebase
+        if not firebase_admin._apps:
+            cred = credentials.Certificate("rendicion-de-gastos-bd.json")
+            firebase_admin.initialize_app(cred)
         
-        if 'db_rendiciones' not in st.session_state:
-            st.session_state.db_rendiciones = [
-                {
-                    "id": 1, 
-                    "usuario_id": 1, 
-                    "usuario": "Francisco Benavides", 
-                    "rut": "76.452.128-K", 
-                    "folio": "1045", 
-                    "monto": 620000, 
-                    "estado": "Pendiente", 
-                    "justificacion": "[Materiales e Insumos TI] Compra de insumos y routers ISP.", 
-                    "requiere_gerencia": True,
-                    "fecha_documento": "2026-05-10"
-                }
-            ]
+        self.db = firestore.client()
+        self._todas_cache = None
+        
+        # 2. Carga de datos base (si la base de datos estuviera vacía)
+        self._verificar_y_cargar_datos_iniciales()
+        
+        # 3. 🛠️ MIGRACIÓN AUTOMÁTICA: Hashea las contraseñas viejas que estén en texto plano
+        self._migrar_contrasenas_existenses()
 
-        # SECCIÓN 10: Inicialización de la Entidad Log Evento para trazabilidad académica
-        if 'db_logs' not in st.session_state:
-            st.session_state.db_logs = [
-                {"id": 1, "rendicion_id": 1, "autor": "Francisco Benavides", "estado_origen": "Borrador", "estado_destino": "Pendiente", "timestamp": "2026-05-21 10:30"}
+    def _hash_password(self, password: str) -> str:
+        """Aplica un algoritmo criptográfico SHA-256 de una sola vía a la contraseña."""
+        return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+    def _verificar_y_cargar_datos_iniciales(self):
+        """Puebla Firestore automáticamente con contraseñas de fábrica si está vacío."""
+        users_ref = self.db.collection("usuarios")
+        if not list(users_ref.limit(1).stream()):
+            password_hasheado = self._hash_password("123")
+            usuarios_base = [
+                {"id": 1, "username": "francisco", "password": password_hasheado, "nombre": "Francisco Benavides", "rol": "Rendidor"},
+                {"id": 2, "username": "catalina", "password": password_hasheado, "nombre": "Catalina Vergara", "rol": "Bandeja Auditoria"},
+                {"id": 3, "username": "gerente", "password": password_hasheado, "nombre": "Gerente de Finanzas", "rol": "Gerencia Finanzas"},
+                {"id": 4, "username": "tesorero", "password": password_hasheado, "nombre": "Tesorero Liquidador", "rol": "Cierre Tesoreria"}
             ]
+            for u in usuarios_base:
+                users_ref.document(u["username"]).set(u)
+
+        rend_ref = self.db.collection("rendiciones")
+        if not list(rend_ref.limit(1).stream()):
+            sample_rendicion = {
+                "id": 1, "usuario_id": 1, "usuario": "Francisco Benavides", 
+                "rut": "76.452.128-K", "folio": "1045", "monto": 620000, 
+                "estado": "Pendiente", "justificacion": "[Materiales e Insumos TI] Compra de insumos y routers ISP.", 
+                "requiere_gerencia": True, "fecha_documento": "2026-05-10"
+            }
+            rend_ref.document("1").set(sample_rendicion)
+            self.registrar_log(1, "Francisco Benavides", "Borrador", "Pendiente")
+
+    def _migrar_contrasenas_existenses(self):
+        """Escanea los usuarios actuales y encripta las contraseñas de texto plano en segundo plano."""
+        usuarios = self.db.collection("usuarios").stream()
+        for doc in usuarios:
+            datos = doc.to_dict()
+            password_actual = datos.get("password", "")
+            
+            # Una contraseña encriptada con SHA-256 SIEMPRE mide exactamente 64 caracteres.
+            # Si mide menos (como "123"), significa que sigue en texto plano y debemos migrarla.
+            if len(password_actual) != 64:
+                password_encriptada = self._hash_password(password_actual)
+                self.db.collection("usuarios").document(doc.id).update({
+                    "password": password_encriptada
+                })
 
     def registrar_log(self, rendicion_id: int, autor: str, origen: str, destino: str):
+        """Registra la trazabilidad como una subcolección interna del documento de rendición."""
         nuevo_log = {
-            "id": len(st.session_state.db_logs) + 1,
-            "rendicion_id": rendicion_id,
+            "rendicion_id": int(rendicion_id),
             "autor": autor,
             "estado_origen": origen,
             "estado_destino": destino,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
-        st.session_state.db_logs.append(nuevo_log)
+        self.db.collection("rendiciones").document(str(rendicion_id)).collection("logs").add(nuevo_log)
 
     def obtener_logs_por_rendicion(self, rendicion_id: int):
-        return [log for log in st.session_state.db_logs if log["rendicion_id"] == rendicion_id]
+        """Extrae el historial cronológico desde la subcolección de Firebase."""
+        logs_ref = self.db.collection("rendiciones").document(str(rendicion_id)).collection("logs").stream()
+        lista_logs = [doc.to_dict() for doc in logs_ref]
+        lista_logs.sort(key=lambda x: x.get('timestamp', ''))
+        return lista_logs
 
     def validar_credenciales(self, username, password):
-        for u in st.session_state.db_usuarios:
-            if u["username"] == username.lower() and u["password"] == password:
-                return u
+        """Hashea la contraseña ingresada en el Login y la compara con el hash de Firestore."""
+        hashed_input = self._hash_password(password)
+        query = self.db.collection("usuarios").where("username", "==", username.lower()).where("password", "==", hashed_input).stream()
+        for doc in query:
+            return doc.to_dict()
         return None
 
     def obtener_todas(self):
-        return st.session_state.db_rendiciones
+        """Devuelve la lista adaptada y protegida contra mutaciones externas de las vistas."""
+        docs = self.db.collection("rendiciones").stream()
+        raw_list = []
+        for doc in docs:
+            data = doc.to_dict()
+            raw_list.append(TrackedDict(data, self.db, data.get("id")))
+        
+        raw_list.sort(key=lambda x: x['id'])
+        self._todas_cache = TrackedList(raw_list, self.db)
+        return self._todas_cache
 
     def verificar_duplicado(self, rut: str, folio: str) -> bool:
-        return any(r['rut'].strip() == rut.strip() and r['folio'].strip() == folio.strip() for r in st.session_state.db_rendiciones)
+        """Verifica en la base de datos la existencia de la boleta para evitar duplicados."""
+        query = self.db.collection("rendiciones").where("rut", "==", rut.strip()).where("folio", "==", folio.strip()).stream()
+        for _ in query:
+            return True
+        return False
 
     def actualizar_estado(self, gasto_id: int, nuevo_estado: str, autor: str):
-        for r in st.session_state.db_rendiciones:
-            if r['id'] == gasto_id:
-                origen = r['estado']
-                r['estado'] = nuevo_estado
-                self.registrar_log(gasto_id, autor, origen, nuevo_estado)
-                break
+        """Actualiza el estado de flujo del documento y dispara el log de auditoría."""
+        doc_ref = self.db.collection("rendiciones").document(str(gasto_id))
+        doc = doc_ref.get()
+        if doc.exists:
+            origen = doc.to_dict().get('estado', 'Ninguno')
+            doc_ref.set({'estado': nuevo_estado}, merge=True)
+            self.registrar_log(gasto_id, autor, origen, nuevo_estado)
