@@ -151,6 +151,20 @@ else:
         }
         .stApp::before { display: none !important; }
 
+        /* Fondo azul del menú lateral */
+        .stApp [data-testid="stSidebar"] {
+            background-color: #2563eb !important;
+            background-image: linear-gradient(180deg, #1e3a8a 0%, #2563eb 100%) !important;
+            color: #ffffff !important;
+        }
+        .stApp [data-testid="stSidebar"] div, 
+        .stApp [data-testid="stSidebar"] span,
+        .stApp [data-testid="stSidebar"] button,
+        .stApp [data-testid="stSidebar"] p,
+        .stApp [data-testid="stSidebar"] h2 {
+            color: #ffffff !important;
+        }
+
         /* Contenedores de formularios y tarjetas de visualización */
         .stApp [data-testid="stVerticalBlockBorderWrapper"], 
         .stApp [data-testid="stVerticalBlockBorderWrapper"] > div, 

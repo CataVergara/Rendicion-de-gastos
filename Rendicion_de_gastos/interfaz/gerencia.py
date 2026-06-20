@@ -1,4 +1,5 @@
 import streamlit as st
+import base64
 
 def renderizar_vista(repositorio, caso_uso):
     # CSS personalizado adaptado al estilo corporativo
@@ -98,6 +99,25 @@ def renderizar_vista(repositorio, caso_uso):
                     </p>
                 </div>
             """, unsafe_allow_html=True)
+
+            with st.expander(f"📎 Ver Boleta / Evidencia Adjunto - Folio {g['folio']}"):
+                archivo_b64 = g.get('archivo_base64', '')
+                archivo_mime = g.get('archivo_mime', 'image/png')
+                if archivo_b64:
+                    if 'image' in archivo_mime:
+                        st.image(f"data:{archivo_mime};base64,{archivo_b64}", width=560)
+                    else:
+                        archivo_bytes = base64.b64decode(archivo_b64)
+                        st.download_button(
+                            label='📥 Descargar PDF de la Boleta',
+                            data=archivo_bytes,
+                            file_name=f'boleta_folio_{g["folio"]}.pdf',
+                            mime=archivo_mime,
+                            use_container_width=True
+                        )
+                        st.markdown("<p style='margin-top: 10px; color: #475569;'>Descargue el archivo PDF para revisarlo en detalle.</p>", unsafe_allow_html=True)
+                else:
+                    st.warning('No se encontró evidencia adjunta en esta rendición.')
 
             # Botones de Acción para el Gerente
             col_btn1, col_btn2, _ = st.columns([3, 3, 4])
