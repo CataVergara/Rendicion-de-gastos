@@ -13,16 +13,14 @@ def renderizar_vista(repositorio, caso_uso):
 
     st.markdown('<div class="auditoria-container">', unsafe_allow_html=True)
     st.markdown("<h2 style='color: #0f172a; font-size: 24px; font-weight: 800; margin: 0;'>Bandeja de Auditoría - Analista</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #64748b; font-size: 14px; margin-bottom: 25px;'>Revisión técnica de legalidad y visualización OCR de adjuntos.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #64748b; font-size: 14px; margin-bottom: 25px;'>Revisión técnica de legalidad y visualización de adjuntos reales.</p>", unsafe_allow_html=True)
 
-    # Captura los gastos en 'Pendiente' que ya no están bloqueados por el Gerente
-    gastos = [r for r in repositorio.obtener_todas() if r['estado'] == 'Pendiente' and not r.get('requiere_gerencia', False)]
+    gastos = [r for r in repositorio.obtener_todas() if r['estado'] == 'Pending' or (r['estado'] == 'Pendiente' and not r.get('requiere_gerencia', False))]
 
     if not gastos:
         st.info("No se registran documentos pendientes de auditoría técnica estándar.")
     else:
         for g in gastos:
-            # Detectar si el gasto ya fue visado previamente por el Gerente (por ser > 500k)
             viene_de_gerencia = g['monto'] > 500000
             borde_tarjeta = "#4f46e5" if viene_de_gerencia else "#2563eb"
             
@@ -34,12 +32,42 @@ def renderizar_vista(repositorio, caso_uso):
                 </div>
             """, unsafe_allow_html=True)
 
-            # Cartel de aviso exclusivo para consistencia con la Sección 13 del informe
             if viene_de_gerencia:
-                st.warning("ℹ **Control Jerárquico:** Este documento ya posee la firma digital de aprobación de la Gerencia de Finanzas por Alta Cuantía. Proceda con la auditoría técnica de la evidencia.")
+                st.warning("ℹ️ **Control Jerárquico:** Este documento ya posee la firma digital de aprobación de la Gerencia de Finanzas por Alta Cuantía. Proceda con la auditoría técnica de la evidencia.")
 
-            with st.expander(f" Ver Evidencia Digital Adjunta (Folio {g['folio']})"):
-                st.code(f"*** OCR READ ***\nRUT EMISOR: {g['rut']}\nFOLIO: {g['folio']}\nTOTAL: ${g['monto']:,}\nSTATUS: INTEGRIDAD VERIFICADA HASH SHA-256", language="text")
+            # --- RENDERIZADO DESDE BASE64 DE FIRESTORE ---
+            with st.expander(f"🔍 Ver Evidencia Digital Adjunta Real (Folio {g['folio']})"):
+                b64_data = g.get("archivo_base64", "")
+                mime_type = g.get("archivo_mime", "image/png")
+                
+                if b64_data:
+                    if "image" in mime_type:
+                        # Insertar el string Base64 directamente como fuente de la imagen en HTML
+                        st.markdown(f"""
+                            <div style="text-align: center; background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px;">
+                                <img src="data:{mime_type};base64,{b64_data}" style="max-width: 100%; max-height: 400px; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);"/>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # Si es un PDF, creamos un botón de descarga decodificado en tiempo real
+                        bytes_decorados = base64.b64decode(b64_data)
+                        st.info("La evidencia se guardó como un Documento PDF institucional.")
+                        st.download_button(
+                            label="📥 Descargar y Visualizar PDF Adjunto",
+                            data=bytes_decorados,
+                            file_name=f"boleta_folio_{g['folio']}.pdf",
+                            mime=mime_type,
+                            use_container_width=True
+                        )
+                else:
+                    st.markdown("""
+                        <div style="background-color: #f1f5f9; padding: 15px; border-radius: 6px; font-family: monospace; font-size: 12px; color: #475569;">
+                            [OCR ADAPTATIVE FALLBACK] Sin archivo binario físico en base de datos.<br>
+                            RUT EMISOR DETECTADO: {}<br>
+                            FOLIO CORRESPONDIENTE: {}<br>
+                            TOTAL TRANSACCIÓN: ${:,}
+                        </div>
+                    """.format(g['rut'], g['folio'], g['monto']), unsafe_allow_html=True)
 
             comentario_obs = st.text_input("Motivo del Reparo Técnico (Obligatorio para observar)", key=f"txt_obs_{g['id']}", placeholder="Ej: Imagen borrosa o datos dispares.")
 

@@ -3,6 +3,9 @@ from datetime import datetime
 import hashlib  # Librería nativa para aplicar hashing criptográfico
 import firebase_admin
 from firebase_admin import credentials, firestore
+from pathlib import Path
+import os
+import base64
 
 # =====================================================================
 # INTERCEPTORES DE CAMBIOS AUTOMÁTICOS PARA FIRESTORE
@@ -43,18 +46,24 @@ class TrackedList(list):
 
 class RepositorioRendicionFirestore:
     def __init__(self):
-        # 1. Inicialización segura de Firebase
+        # 1. Inicialización segura de Firebase con rutas dinámicas absolutas
         if not firebase_admin._apps:
-            cred = credentials.Certificate("rendicion-de-gastos-bd.json")
+            directorio_actual = os.path.dirname(__file__)
+            cred_path = os.path.join(directorio_actual, "rendicion-de-gastos-bd.json")
+            
+            if not os.path.exists(cred_path):
+                base_dir = Path(__file__).resolve().parent.parent
+                cred_path = base_dir / "rendicion-de-gastos-bd.json"
+                
+            if not os.path.exists(str(cred_path)):
+                raise FileNotFoundError(f"Archivo de credenciales no encontrado.")
+                
+            cred = credentials.Certificate(str(cred_path))
             firebase_admin.initialize_app(cred)
         
         self.db = firestore.client()
         self._todas_cache = None
-        
-        # 2. Carga de datos base (si la base de datos estuviera vacía)
         self._verificar_y_cargar_datos_iniciales()
-        
-        # 3. 🛠️ MIGRACIÓN AUTOMÁTICA: Hashea las contraseñas viejas que estén en texto plano
         self._migrar_contrasenas_existenses()
 
     def _hash_password(self, password: str) -> str:
@@ -81,7 +90,8 @@ class RepositorioRendicionFirestore:
                 "id": 1, "usuario_id": 1, "usuario": "Francisco Benavides", 
                 "rut": "76.452.128-K", "folio": "1045", "monto": 620000, 
                 "estado": "Pendiente", "justificacion": "[Materiales e Insumos TI] Compra de insumos y routers ISP.", 
-                "requiere_gerencia": True, "fecha_documento": "2026-05-10"
+                "requiere_gerencia": True, "fecha_documento": "2026-05-10",
+                "archivo_base64": "", "archivo_mime": ""
             }
             rend_ref.document("1").set(sample_rendicion)
             self.registrar_log(1, "Francisco Benavides", "Borrador", "Pendiente")
@@ -92,9 +102,6 @@ class RepositorioRendicionFirestore:
         for doc in usuarios:
             datos = doc.to_dict()
             password_actual = datos.get("password", "")
-            
-            # Una contraseña encriptada con SHA-256 SIEMPRE mide exactamente 64 caracteres.
-            # Si mide menos (como "123"), significa que sigue en texto plano y debemos migrarla.
             if len(password_actual) != 64:
                 password_encriptada = self._hash_password(password_actual)
                 self.db.collection("usuarios").document(doc.id).update({

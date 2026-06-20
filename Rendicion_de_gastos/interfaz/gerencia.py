@@ -1,17 +1,31 @@
 import streamlit as st
 
 def renderizar_vista(repositorio, caso_uso):
-    # CSS personalizado adaptado al estilo corporativo y compatible con layouts anchos
+    # CSS personalizado adaptado al estilo corporativo
     st.markdown("""
         <style>
         .gerencia-container { max-width: 1000px; margin: 0 auto; }
         .card-excepcion { 
             background-color: #ffffff; 
+            color: #0f172a;
             padding: 24px; 
             border-radius: 12px; 
-            border: 1px solid #e2e8f0; 
+            border: 1px solid #cbd5e1; 
             margin-bottom: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .card-excepcion h4 {
+            color: #0f172a !important;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        .card-excepcion p {
+            color: #334155 !important;
+            margin: 0;
+            font-size: 14px;
+        }
+        .card-excepcion strong {
+            color: #0f172a !important;
         }
         .btn-visar button { 
             background-color: #4f46e5 !important; 
@@ -38,7 +52,7 @@ def renderizar_vista(repositorio, caso_uso):
     
     # Encabezado del módulo
     st.markdown("""
-        <div style="background-color: #ffffff; padding: 22px 30px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 25px;">
+        <div style="background-color: #ffffff; padding: 22px 30px; border-radius: 12px; border: 1px solid #cbd5e1; margin-bottom: 25px;">
             <h2 style='color: #1e3a8a; font-size: 24px; font-weight: 800; margin: 0;'>Bandeja de Control Excepcional - Gerencia</h2>
             <p style='color: #64748b; font-size: 14px; margin: 4px 0 0 0;'>
                 Visación jerárquica de rendiciones que superan umbrales financieros o plazos de caducidad (Fase 2).
@@ -76,8 +90,8 @@ def renderizar_vista(repositorio, caso_uso):
                     <span style='float: right; color: {color_alerta}; font-weight: 800; font-size: 12px; background-color: {color_alerta}15; padding: 4px 10px; border-radius: 12px;'>
                         {tipo_alerta}
                     </span>
-                    <h4 style='margin: 0 0 8px 0; color: #0f172a; font-size: 16px;'>Folio: {g['folio']} | Colaborador: {g['usuario']}</h4>
-                    <p style='margin: 0; font-size: 14px; color: #334155;'>
+                    <h4>Folio: {g['folio']} | Colaborador: {g['usuario']}</h4>
+                    <p>
                         <strong>Monto Documentado:</strong> ${g['monto']:,} CLP <br/>
                         <strong>RUT Emisor:</strong> {g['rut']} | <strong>Fecha Emisión:</strong> {g['fecha_documento']} <br/>
                         <span style='color: #64748b; font-style: italic;'><strong>Justificación:</strong> {g['justificacion']}</span>
@@ -111,6 +125,6 @@ def renderizar_vista(repositorio, caso_uso):
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-            st.markdown("<hr style='border: 0; border-top: 1px dashed #e2e8f0; margin: 15px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;'>", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
