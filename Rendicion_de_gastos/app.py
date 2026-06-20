@@ -215,7 +215,10 @@ else:
         }
 
         /* Inputs (Fondo Negro #121212 y Bordes/Letras Blancas en Dark Mode) */
-        .stApp input, 
+        .stApp input[type="text"],
+        .stApp input[type="password"],
+        .stApp input[type="number"],
+        .stApp textarea,
         .stApp select, 
         .stApp div[role="combobox"] button, 
         .stApp .stNumberInput div,

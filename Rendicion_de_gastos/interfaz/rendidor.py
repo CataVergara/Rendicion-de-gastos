@@ -44,9 +44,84 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
             background: linear-gradient(135deg, #ffffff 30%, #cbd5e1 100%) !important;
             border-radius: 14px !important;
         }
-        input, select, div[role="combobox"] button, .stNumberInput div {
-            background-color: #ffffff !important; color: #0f172a !important;
-            border: 1px solid #94a3b8 !important; border-radius: 6px !important; height: 40px !important;
+        .ft-max-width-container div[data-baseweb="input"],
+        .ft-max-width-container div[data-baseweb="select"],
+        .ft-max-width-container .stNumberInput div,
+        .ft-max-width-container [data-baseweb="datepicker"] {
+            background-color: #ffffff !important;
+            border: 1px solid #94a3b8 !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+            min-height: 44px !important;
+            padding: 0 14px !important;
+            margin: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .ft-max-width-container div[data-baseweb="input"] > div,
+        .ft-max-width-container div[data-baseweb="select"] > div,
+        .ft-max-width-container .stNumberInput div > div,
+        .ft-max-width-container [data-baseweb="datepicker"] > div {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        .ft-max-width-container input,
+        .ft-max-width-container select,
+        .ft-max-width-container textarea {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            color: #0f172a !important;
+            height: auto !important;
+            padding: 10px 0 !important;
+            margin: 0 !important;
+        }
+        .ft-max-width-container div[role="combobox"] button {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #94a3b8 !important;
+            border-radius: 8px !important;
+            height: 44px !important;
+            padding: 0 14px !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+        }
+        .ft-max-width-container [data-testid="stFileUploader"] {
+            background-color: #ffffff !important;
+            border: 1px solid #94a3b8 !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+            padding: 10px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 16px 0 !important;
+        }
+        .ft-max-width-container [data-testid="stFileUploader"] > div:first-child,
+        .ft-max-width-container [data-testid="stFileUploader"] > div:first-child > div,
+        .ft-max-width-container [data-testid="stFileUploader"] [data-baseweb="input"],
+        .ft-max-width-container [data-testid="stFileUploader"] [data-baseweb="file-uploader"],
+        .ft-max-width-container [data-testid="stFileUploader"] .css-1v3fvcr {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        .ft-max-width-container [data-testid="stFileUploader"] div[role="button"],
+        .ft-max-width-container [data-testid="stFileUploader"] button {
+            min-height: 40px !important;
+            border-radius: 6px !important;
+            background-color: #1e3a8a !important;
+            color: #ffffff !important;
+            border: none !important;
+        }
+        .ft-max-width-container [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
+            margin: 0 !important;
+            padding: 0 !important;
         }
         [data-testid="stWidgetLabel"] p, label { color: #0f172a !important; font-weight: 700 !important; }
         .header-card { background-color: #ffffff; padding: 22px 30px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
@@ -112,8 +187,12 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
             st.error("Error obligatorio: Debe adjuntar la evidencia digital para enviar a revisión.")
         elif categoria == "Seleccione una categoría...":
             st.error("Error: Clasifique el gasto en una categoría válida.")
-        elif repositorio.verificar_duplicado(input_rut, input_folio) and not st.session_state.gasto_editar_id:
-            st.error("❌ Excepción E4: La combinación de RUT Emisor + Número de Folio ya existe.")
+        elif repositorio.existe_folio(input_folio, exclude_id=st.session_state.gasto_editar_id):
+            st.error("❌ Excepción E4: El número de folio ya existe en otra boleta.")
+        elif repositorio.rut_asignado_a_otro_usuario(input_rut, usuario_activo["id"], exclude_id=st.session_state.gasto_editar_id):
+            st.error("❌ El RUT ya está asociado a otro usuario.")
+        elif repositorio.usuario_tiene_otro_rut(usuario_activo["id"], input_rut, exclude_id=st.session_state.gasto_editar_id):
+            st.error("❌ Cada usuario solo puede usar un único RUT de emisor.")
         elif not input_rut or not input_folio or input_monto <= 0:
             st.error("Error: Complete todos los campos.")
         else:

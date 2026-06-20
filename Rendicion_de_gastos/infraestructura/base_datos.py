@@ -146,10 +146,40 @@ class RepositorioRendicionFirestore:
         self._todas_cache = TrackedList(raw_list, self.db)
         return self._todas_cache
 
-    def verificar_duplicado(self, rut: str, folio: str) -> bool:
-        """Verifica en la base de datos la existencia de la boleta para evitar duplicados."""
-        query = self.db.collection("rendiciones").where("rut", "==", rut.strip()).where("folio", "==", folio.strip()).stream()
-        for _ in query:
+    def existe_folio(self, folio: str, exclude_id: int = None) -> bool:
+        """Verifica si un número de folio ya existe en otra boleta."""
+        query = self.db.collection("rendiciones").where("folio", "==", folio.strip()).stream()
+        for doc in query:
+            if exclude_id is None or str(doc.to_dict().get("id")) != str(exclude_id):
+                return True
+        return False
+
+    def rut_asignado_a_otro_usuario(self, rut: str, usuario_id: int, exclude_id: int = None) -> bool:
+        """Verifica si el rut ya está asociado a un usuario distinto."""
+        query = self.db.collection("rendiciones").where("rut", "==", rut.strip()).stream()
+        for doc in query:
+            data = doc.to_dict()
+            if (exclude_id is None or str(data.get("id")) != str(exclude_id)) and data.get("usuario_id") != usuario_id:
+                return True
+        return False
+
+    def usuario_tiene_otro_rut(self, usuario_id: int, rut: str, exclude_id: int = None) -> bool:
+        """Verifica si el usuario ya usa otro rut en una rendición distinta."""
+        query = self.db.collection("rendiciones").where("usuario_id", "==", usuario_id).stream()
+        for doc in query:
+            data = doc.to_dict()
+            if (exclude_id is None or str(data.get("id")) != str(exclude_id)) and data.get("rut") != rut.strip():
+                return True
+        return False
+
+    def verificar_duplicado(self, rut: str, folio: str, usuario_id: int = None, exclude_id: int = None) -> bool:
+        """Verifica si existe conflicto de folio o de rut-usuario antes de crear/modificar."""
+        if self.existe_folio(folio, exclude_id=exclude_id):
+            return True
+        if usuario_id is not None and (
+            self.rut_asignado_a_otro_usuario(rut, usuario_id, exclude_id=exclude_id) or
+            self.usuario_tiene_otro_rut(usuario_id, rut, exclude_id=exclude_id)
+        ):
             return True
         return False
 
