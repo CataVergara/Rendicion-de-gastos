@@ -28,12 +28,17 @@ def limpiar_monto_a_int(monto_str):
 
 
 def renderizar_vista(repositorio, caso_uso, usuario_activo):
+    # Inicialización estructurada de variables en el contenedor de estados
+    if "val_rut" not in st.session_state:
+        st.session_state.val_rut = ""
+    if "val_folio" not in st.session_state:
+        st.session_state.val_folio = ""
+    if "val_monto_str" not in st.session_state:
+        st.session_state.val_monto_str = "0"
+    if "val_just" not in st.session_state:
+        st.session_state.val_just = ""
     if "gasto_editar_id" not in st.session_state:
         st.session_state.gasto_editar_id = None
-        st.session_state.val_rut = ""
-        st.session_state.val_folio = ""
-        st.session_state.val_monto_str = "0"
-        st.session_state.val_just = ""
 
     st.markdown("""
         <style>
@@ -143,7 +148,8 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
     if st.session_state.gasto_editar_id:
         st.info(f"📝 Editando activamente la rendición ID/Folio: {st.session_state.val_folio}.")
     
-    with st.container(border=True):
+    # SE AGREGA FORMULARIO AUTOMÁTICO CON ENTRADAS DE CONTROL CONJUNTAS
+    with st.form("contenedor_rendicion", clear_on_submit=False):
         st.markdown('<p style="font-size: 13px; font-weight: 800; color: #475569;">DATOS SOLICITADOS DEL COMPROBANTE</p>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
@@ -164,7 +170,7 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
                 st.rerun()
             
             input_monto = limpiar_monto_a_int(monto_formateado)
-            input_just = st.text_input("Justificación Comercial / Motivo", value=st.session_state.val_just, placeholder="Ej: Insumos TI")
+            input_just = st.text_area("Justificación Comercial / Motivo", value=st.session_state.val_just, placeholder="Ej: Insumos TI", height=44)
             categoria = st.selectbox("Categoría de Clasificación", ["Seleccione una categoría...", "Logística y Transportes", "Alimentación y Viáticos", "Materiales e Insumos TI", "Licencias y Servicios Cloud"])
             
         st.markdown("<p style='font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;'>Evidencia Digital Adjunta</p>", unsafe_allow_html=True)
@@ -173,28 +179,34 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
             st.markdown('<div class="btn-enviar">', unsafe_allow_html=True)
-            btn_enviar = st.button("Enviar a Flujo de Aprobación", use_container_width=True)
+            btn_enviar = st.form_submit_button("Enviar a Flujo de Aprobación", use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
         with col_btn2:
             st.markdown('<div class="btn-borrador">', unsafe_allow_html=True)
-            btn_borrador = st.button("Guardar como Borrador", use_container_width=True)
+            btn_borrador = st.form_submit_button("Guardar como Borrador", use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- PLANIFICADOR DE CONTROL ANTIFRAUDE Y EXCEPCIONES ---
     if btn_enviar or btn_borrador:
         dias_antiguedad = (date.today() - input_fecha).days
         
-        if btn_enviar and archivo_cargado is None:
-            st.error("Error obligatorio: Debe adjuntar la evidencia digital para enviar a revisión.")
+        if st.session_state.gasto_editar_id:
+            es_duplicado = repositorio.verificar_duplicado(input_rut, input_folio, usuario_activo["id"], exclude_id=st.session_state.gasto_editar_id)
+        else:
+            es_duplicado = repositorio.verificar_duplicado(input_rut, input_folio, usuario_activo["id"])
+        
+        if not str(input_rut).strip() or not str(input_folio).strip() or not str(input_just).strip() or input_monto <= 0:
+            st.error("⚠️ Error de Completitud: Por favor complete todos los campos mandatorios solicitados y asegure un monto total superior a $0.")
+        
         elif categoria == "Seleccione una categoría...":
-            st.error("Error: Clasifique el gasto en una categoría válida.")
-        elif repositorio.existe_folio(input_folio, exclude_id=st.session_state.gasto_editar_id):
-            st.error("❌ Excepción E4: El número de folio ya existe en otra boleta.")
-        elif repositorio.rut_asignado_a_otro_usuario(input_rut, usuario_activo["id"], exclude_id=st.session_state.gasto_editar_id):
-            st.error("❌ El RUT ya está asociado a otro usuario.")
-        elif repositorio.usuario_tiene_otro_rut(usuario_activo["id"], input_rut, exclude_id=st.session_state.gasto_editar_id):
-            st.error("❌ Cada usuario solo puede usar un único RUT de emisor.")
-        elif not input_rut or not input_folio or input_monto <= 0:
-            st.error("Error: Complete todos los campos.")
+            st.error("⚠️ Validación técnica: Debe clasificar la rendición dentro de una categoría contable válida.")
+            
+        elif btn_enviar and archivo_cargado is None:
+            st.error("⚠️ BR-04 (Evidencia Obligatoria): Es mandatorio adjuntar el archivo digitalizado de la boleta para enviar a revisión fiscal.")
+            
+        elif es_duplicado:
+            st.error(f"❌ Excepción E4 (Control de Fraude): El Número de Folio '{input_folio}' ya se encuentra registrado en tus rendiciones vigentes.")
+            
         else:
             justificacion_completa = f"[{categoria}] {input_just}"
             requiere_g = True if input_monto > 500000 else False
@@ -202,9 +214,12 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
             if btn_borrador:
                 estado_inicial = "Borrador"
             else:
-                estado_inicial = "Borrador" if dias_antiguedad > 30 else "Pendiente"
+                if dias_antiguedad > 30:
+                    estado_inicial = "Borrador"
+                    st.warning(f"⏳ Excepción E5: Documento con {dias_antiguedad} días de antigüedad detectado. El registro se mantendrá bloqueado en 'Borrador' hasta autorización de Gerencia de Finanzas.")
+                else:
+                    estado_inicial = "Pendiente"
 
-            # --- CONVERSIÓN DE ARCHIVO A BASE64 ---
             archivo_b64 = ""
             mime_type = ""
             if archivo_cargado is not None:
@@ -216,23 +231,27 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
                 for r in repositorio.obtener_todas():
                     if r["id"] == g_id:
                         origen = r["estado"]
-                        update_data = {"rut": input_rut, "folio": input_folio, "monto": input_monto, "justificacion": justificacion_completa, "estado": estado_inicial, "requiere_gerencia": requiere_g}
+                        update_data = {
+                            "rut": input_rut, "folio": input_folio, "monto": input_monto, 
+                            "justificacion": justificacion_completa, "estado": estado_inicial, 
+                            "requiere_gerencia": requiere_g, "fecha_documento": str(input_fecha)
+                        }
                         if archivo_b64:
                             update_data["archivo_base64"] = archivo_b64
                             update_data["archivo_mime"] = mime_type
                         r.update(update_data)
                         repositorio.registrar_log(g_id, usuario_activo["nombre"], origen, estado_inicial)
                 
+                # REINICIO ABSOLUTO DE VARIABLES SIN COLISIONES DE BUFFER
                 st.session_state.gasto_editar_id = None
                 st.session_state.val_rut = ""
                 st.session_state.val_folio = ""
                 st.session_state.val_monto_str = "0"
                 st.session_state.val_just = ""
-                st.success("Rendición modificada correctamente.")
                 st.rerun()
                 
             else:
-                nuevo_id = len(repositorio.obtener_todas()) + 1
+                nuevo_id = repositorio.obtener_siguiente_id_rendicion()
                 nueva_rendicion = {
                     "id": nuevo_id, "usuario_id": usuario_activo["id"], "usuario": usuario_activo["nombre"],
                     "rut": input_rut, "folio": input_folio, "monto": input_monto,
@@ -243,11 +262,11 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
                 repositorio.obtener_todas().append(nueva_rendicion)
                 repositorio.registrar_log(nuevo_id, usuario_activo["nombre"], "Ninguno", estado_inicial)
                 
+                # REINICIO ABSOLUTO DE VARIABLES SIN COLISIONES DE BUFFER
                 st.session_state.val_rut = ""
                 st.session_state.val_folio = ""
                 st.session_state.val_monto_str = "0"
                 st.session_state.val_just = ""
-                st.success(f"La rendición se ha registrado con éxito en estado '{estado_inicial}'.")
                 st.rerun()
 
     st.markdown("<br><h3 style='color:#1e3a8a; font-weight:800; font-size:18px;'>Mis Rendiciones Recientes</h3>", unsafe_allow_html=True)
@@ -291,6 +310,7 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
         if logs_g:
             st.markdown("<p style='margin: 8px 0 2px 0; font-size: 11px; color: #94a3b8; font-weight:800;'>HISTORIAL DE TRAZABILIDAD (LOGS):</p>", unsafe_allow_html=True)
             for log in logs_g:
-                st.markdown(f"<p style='margin:0; font-size:11px; color:#64748b; font-family:monospace;'>• [{log['timestamp']}] Usuario '{log['autor']}' cambió estado de <strong>{log['estado_origen']}</strong> a <strong>{log['estado_destino']}</strong></p>", unsafe_allow_html=True)
+               st.markdown(f"<p style='margin:0; font-size:11px; color:#64748b; font-family:monospace;'>• [{log['timestamp']}] Usuario '{log['autor']}' cambió estado de <strong>{log['estado_origen']}</strong> a <strong>{log['estado_destino']}</strong></p>", unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)

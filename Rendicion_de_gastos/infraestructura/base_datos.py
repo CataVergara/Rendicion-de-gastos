@@ -71,15 +71,15 @@ class RepositorioRendicionFirestore:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
     def _verificar_y_cargar_datos_iniciales(self):
-        """Puebla Firestore automáticamente con contraseñas de fábrica si está vacío."""
+        """Puebla Firestore automáticamente con usuarios de fábrica si está vacío."""
         users_ref = self.db.collection("usuarios")
         if not list(users_ref.limit(1).stream()):
             password_hasheado = self._hash_password("123")
             usuarios_base = [
-                {"id": 1, "username": "francisco", "password": password_hasheado, "nombre": "Francisco Benavides", "rol": "Rendidor"},
-                {"id": 2, "username": "catalina", "password": password_hasheado, "nombre": "Catalina Vergara", "rol": "Bandeja Auditoria"},
-                {"id": 3, "username": "gerente", "password": password_hasheado, "nombre": "Gerente de Finanzas", "rol": "Gerencia Finanzas"},
-                {"id": 4, "username": "tesorero", "password": password_hasheado, "nombre": "Tesorero Liquidador", "rol": "Cierre Tesoreria"}
+                {"id": 1, "username": "francisco", "password": password_hasheado, "nombre": "Francisco Benavides", "rol": "Rendidor", "rut": "21.345.245-7"},
+                {"id": 2, "username": "catalina", "password": password_hasheado, "nombre": "Catalina Vergara", "rol": "Bandeja Auditoria", "rut": "22.222.222-2"},
+                {"id": 3, "username": "gerente", "password": password_hasheado, "nombre": "Gerente de Finanzas", "rol": "Gerencia Finanzas", "rut": "33.333.333-3"},
+                {"id": 4, "username": "tesorero", "password": password_hasheado, "nombre": "Tesorero Liquidador", "rol": "Cierre Tesoreria", "rut": "44.444.444-4"}
             ]
             for u in usuarios_base:
                 users_ref.document(u["username"]).set(u)
@@ -107,6 +107,46 @@ class RepositorioRendicionFirestore:
                 self.db.collection("usuarios").document(doc.id).update({
                     "password": password_encriptada
                 })
+
+    def obtener_siguiente_id_usuario(self) -> int:
+        """Calcula el siguiente identificador numérico incremental para nuevos usuarios."""
+        usuarios = self.db.collection("usuarios").stream()
+        max_id = 0
+        for doc in usuarios:
+            datos = doc.to_dict()
+            u_id = datos.get("id", 0)
+            if u_id > max_id:
+                max_id = u_id
+        return max_id + 1
+
+    def obtener_siguiente_id_rendicion(self) -> int:
+        """Calcula el correlativo numérico incremental real analizando los IDs de la colección en la nube."""
+        rendiciones = self.db.collection("rendiciones").stream()
+        max_id = 0
+        for doc in rendiciones:
+            data = doc.to_dict()
+            r_id = data.get("id", 0)
+            try:
+                r_id_int = int(r_id)
+                if r_id_int > max_id:
+                    max_id = r_id_int
+            except (ValueError, TypeError):
+                continue
+        return max_id + 1
+
+    def registrar_usuario(self, username, password_plana, nombre, rol, rut) -> bool:
+        """Encripta la clave y añade de forma estructurada un nuevo colaborador con su RUT institucional."""
+        password_encriptada = self._hash_password(password_plana)
+        nuevo_usuario = {
+            "id": self.obtener_siguiente_id_usuario(),
+            "username": username.lower().strip(),
+            "password": password_encriptada,
+            "nombre": nombre.strip(),
+            "rol": rol,
+            "rut": rut.strip()
+        }
+        self.db.collection("usuarios").document(nuevo_usuario["username"]).set(nuevo_usuario)
+        return True
 
     def registrar_log(self, rendicion_id: int, autor: str, origen: str, destino: str):
         """Registra la trazabilidad como una subcolección interna del documento de rendición."""
@@ -146,40 +186,32 @@ class RepositorioRendicionFirestore:
         self._todas_cache = TrackedList(raw_list, self.db)
         return self._todas_cache
 
-    def existe_folio(self, folio: str, exclude_id: int = None) -> bool:
-        """Verifica si un número de folio ya existe en otra boleta."""
-        query = self.db.collection("rendiciones").where("folio", "==", folio.strip()).stream()
-        for doc in query:
-            if exclude_id is None or str(doc.to_dict().get("id")) != str(exclude_id):
-                return True
-        return False
-
-    def rut_asignado_a_otro_usuario(self, rut: str, usuario_id: int, exclude_id: int = None) -> bool:
-        """Verifica si el rut ya está asociado a un usuario distinto."""
-        query = self.db.collection("rendiciones").where("rut", "==", rut.strip()).stream()
-        for doc in query:
+    def verificar_duplicado(self, rut: str, folio: str, usuario_id: int, exclude_id: int = None) -> bool:
+        """
+        BR-06 / Excepción E4: Control de Integridad Multivariable y Folio Único.
+        Bloquea el ingreso si el Folio ya existe globalmente para el usuario, o si se repite la relación RUT + Folio.
+        """
+        # 1. Control estricto por Folio Único para el usuario activo
+        query_folio = self.db.collection("rendiciones") \
+            .where("usuario_id", "==", int(usuario_id)) \
+            .where("folio", "==", folio.strip()).stream()
+            
+        for doc in query_folio:
             data = doc.to_dict()
-            if (exclude_id is None or str(data.get("id")) != str(exclude_id)) and data.get("usuario_id") != usuario_id:
-                return True
-        return False
-
-    def usuario_tiene_otro_rut(self, usuario_id: int, rut: str, exclude_id: int = None) -> bool:
-        """Verifica si el usuario ya usa otro rut en una rendición distinta."""
-        query = self.db.collection("rendiciones").where("usuario_id", "==", usuario_id).stream()
-        for doc in query:
-            data = doc.to_dict()
-            if (exclude_id is None or str(data.get("id")) != str(exclude_id)) and data.get("rut") != rut.strip():
-                return True
-        return False
-
-    def verificar_duplicado(self, rut: str, folio: str, usuario_id: int = None, exclude_id: int = None) -> bool:
-        """Verifica si existe conflicto de folio o de rut-usuario antes de crear/modificar."""
-        if self.existe_folio(folio, exclude_id=exclude_id):
+            if exclude_id is not None and str(data.get("id")) == str(exclude_id):
+                continue
             return True
-        if usuario_id is not None and (
-            self.rut_asignado_a_otro_usuario(rut, usuario_id, exclude_id=exclude_id) or
-            self.usuario_tiene_otro_rut(usuario_id, rut, exclude_id=exclude_id)
-        ):
+
+        # 2. Control relacional: RUT + Folio
+        query_relacional = self.db.collection("rendiciones") \
+            .where("usuario_id", "==", int(usuario_id)) \
+            .where("rut", "==", rut.strip()) \
+            .where("folio", "==", folio.strip()).stream()
+            
+        for doc in query_relacional:
+            data = doc.to_dict()
+            if exclude_id is not None and str(data.get("id")) == str(exclude_id):
+                continue
             return True
         return False
 

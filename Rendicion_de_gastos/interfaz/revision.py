@@ -1,3 +1,5 @@
+import base64
+
 import streamlit as st
 
 def renderizar_vista(repositorio, caso_uso):
