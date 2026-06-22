@@ -191,7 +191,6 @@ class RepositorioRendicionFirestore:
         BR-06 / Excepción E4: Control de Integridad Multivariable y Folio Único.
         Bloquea el ingreso si el Folio ya existe globalmente para el usuario, o si se repite la relación RUT + Folio.
         """
-        # 1. Control estricto por Folio Único para el usuario activo
         query_folio = self.db.collection("rendiciones") \
             .where("usuario_id", "==", int(usuario_id)) \
             .where("folio", "==", folio.strip()).stream()
@@ -202,7 +201,6 @@ class RepositorioRendicionFirestore:
                 continue
             return True
 
-        # 2. Control relacional: RUT + Folio
         query_relacional = self.db.collection("rendiciones") \
             .where("usuario_id", "==", int(usuario_id)) \
             .where("rut", "==", rut.strip()) \
@@ -223,3 +221,46 @@ class RepositorioRendicionFirestore:
             origen = doc.to_dict().get('estado', 'Ninguno')
             doc_ref.set({'estado': nuevo_estado}, merge=True)
             self.registrar_log(gasto_id, autor, origen, nuevo_estado)
+
+    # =====================================================================
+    # NUEVO MÉTODO: ELIMINACIÓN ESTRICTA Y SINCRONIZACIÓN DE CACHÉ
+    # =====================================================================
+    def eliminar_rendicion(self, gasto_id, folio_documento) -> bool:
+        """
+        Elimina de forma segura un borrador específico tanto de Cloud Firestore 
+        (incluyendo subcolecciones de logs) como del caché TrackedList local.
+        """
+        try:
+            doc_str_id = str(gasto_id)
+            doc_ref = self.db.collection("rendiciones").document(doc_str_id)
+            
+            # 1. Eliminar subcolección 'logs' interna para mantener limpia la BD
+            logs_docs = doc_ref.collection("logs").stream()
+            for log_doc in logs_docs:
+                log_doc.reference.delete()
+                
+            # 2. Eliminar el documento base de la rendición
+            doc_ref.delete()
+            
+            # 3. Doble verificación de seguridad en la nube filtrando por folio
+            extra_docs = self.db.collection("rendiciones").where("folio", "==", str(folio_documento)).stream()
+            for extra_doc in extra_docs:
+                data_extra = extra_doc.to_dict()
+                # Solo borra si coincide con el ID correlativo para evitar colisiones cruzadas
+                if str(data_extra.get("id")) == doc_str_id:
+                    extra_doc.reference.delete()
+
+            # 4. Sincronizar de inmediato el caché interno que alimenta a la vista de Streamlit
+            if self._todas_cache is not None:
+                # Filtramos la lista interna removiendo el elemento exacto que coincida con ID y folio
+                elementos_filtrados = [
+                    r for r in self._todas_cache 
+                    if str(r.get('id')) != doc_str_id and str(r.get('folio')) != str(folio_documento)
+                ]
+                # Re-instanciamos la lista inteligente sobre los datos limpios
+                self._todas_cache = TrackedList(elementos_filtrados, self.db)
+                
+            return True
+        except Exception as e:
+            print(f"Error crítico al intentar eliminar la rendición de Firebase: {e}")
+            return False

@@ -196,13 +196,16 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
             es_duplicado = repositorio.verificar_duplicado(input_rut, input_folio, usuario_activo["id"])
         
         if not str(input_rut).strip() or not str(input_folio).strip() or not str(input_just).strip() or input_monto <= 0:
-            st.error("⚠️ Error de Completitud: Por favor complete todos los campos mandatorios solicitados y asegure un monto total superior a $0.")
+            st.error("⚠️ Error de Completitud: Por favor complete todos los campos mandatorios solicitados (RUT, Folio, Justificación) y asegure un monto total superior a $0.")
         
         elif categoria == "Seleccione una categoría...":
             st.error("⚠️ Validación técnica: Debe clasificar la rendición dentro de una categoría contable válida.")
             
         elif btn_enviar and archivo_cargado is None:
             st.error("⚠️ BR-04 (Evidencia Obligatoria): Es mandatorio adjuntar el archivo digitalizado de la boleta para enviar a revisión fiscal.")
+            
+        elif btn_enviar and dias_antiguedad > 30:
+            st.error(f"❌ Restricción de Antigüedad: El documento tiene {dias_antiguedad} días de antigüedad. No se permite enviar a revisión flujos que superen el límite legal de 30 días.")
             
         elif es_duplicado:
             st.error(f"❌ Excepción E4 (Control de Fraude): El Número de Folio '{input_folio}' ya se encuentra registrado en tus rendiciones vigentes.")
@@ -214,11 +217,7 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
             if btn_borrador:
                 estado_inicial = "Borrador"
             else:
-                if dias_antiguedad > 30:
-                    estado_inicial = "Borrador"
-                    st.warning(f"⏳ Excepción E5: Documento con {dias_antiguedad} días de antigüedad detectado. El registro se mantendrá bloqueado en 'Borrador' hasta autorización de Gerencia de Finanzas.")
-                else:
-                    estado_inicial = "Pendiente"
+                estado_inicial = "Pendiente"
 
             archivo_b64 = ""
             mime_type = ""
@@ -242,7 +241,6 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
                         r.update(update_data)
                         repositorio.registrar_log(g_id, usuario_activo["nombre"], origen, estado_inicial)
                 
-                # REINICIO ABSOLUTO DE VARIABLES SIN COLISIONES DE BUFFER
                 st.session_state.gasto_editar_id = None
                 st.session_state.val_rut = ""
                 st.session_state.val_folio = ""
@@ -262,43 +260,104 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
                 repositorio.obtener_todas().append(nueva_rendicion)
                 repositorio.registrar_log(nuevo_id, usuario_activo["nombre"], "Ninguno", estado_inicial)
                 
-                # REINICIO ABSOLUTO DE VARIABLES SIN COLISIONES DE BUFFER
                 st.session_state.val_rut = ""
                 st.session_state.val_folio = ""
                 st.session_state.val_monto_str = "0"
                 st.session_state.val_just = ""
                 st.rerun()
 
+    # =====================================================================
+    # MOTOR DE LIMPIEZA AUTOMÁTICA DE HISTORIAL EN SEGUNDO PLANO
+    # =====================================================================
+    mis_gastos_raw = [g for g in repositorio.obtener_todas() if g.get('usuario_id') == usuario_activo['id']]
+    ejecutar_limpieza = False
+
+    for item_g in mis_gastos_raw:
+        try:
+            f_doc = date.fromisoformat(item_g['fecha_documento'])
+            antig = (date.today() - f_doc).days
+        except Exception:
+            antig = 0
+
+        # Regla 1: Si está Pendiente y pasó los 30 días -> Pasa a Expirado y se ELIMINA en el acto de Firebase
+        if item_g.get('estado') == "Pendiente" and antig >= 30:
+            repositorio.eliminar_rendicion(item_g['id'], item_g['folio'])
+            ejecutar_limpieza = True
+
+        # Regla 2: Si cambió a Pagado y ya transcurrieron los 10 días establecidos -> Se ELIMINA de Firebase
+        elif item_g.get('estado') == "Pagado" and antig >= 10:
+            repositorio.eliminar_rendicion(item_g['id'], item_g['folio'])
+            ejecutar_limpieza = True
+
+    if ejecutar_limpieza:
+        st.rerun()
+
+    # --- RENDERIZADO DEL LISTADO ACTUALIZADO Y DEPURADO ---
     st.markdown("<br><h3 style='color:#1e3a8a; font-weight:800; font-size:18px;'>Mis Rendiciones Recientes</h3>", unsafe_allow_html=True)
     mis_gastos = [g for g in repositorio.obtener_todas() if g.get('usuario_id') == usuario_activo['id']]
     
     for g in mis_gastos:
         estado_g = g['estado']
-        if estado_g == 'Observado': bg_b, ft_b = '#fef3c7', '#d97706'
-        elif estado_g in ['Autorizado', 'Pagado', 'Aprobado Analista', 'Autorizado - Pendiente de Fondos']: bg_b, ft_b = '#d1fae5', '#065f46'
-        elif estado_g == 'Borrador': bg_b, ft_b = '#f1f5f9', '#475569'
-        else: bg_b, ft_b = "#e0f2fe", '#0369a1'
+        logs_g = repositorio.obtener_logs_por_rendicion(g['id'])
+        
+        fecha_hora_accion = ""
+        if logs_g:
+            fecha_hora_accion = logs_g[-1]['timestamp']
+        
+        try:
+            fecha_doc = date.fromisoformat(g['fecha_documento'])
+            antiguedad = (date.today() - fecha_doc).days
+            dias_restantes = 30 - antiguedad
+        except Exception:
+            dias_restantes = 30
+
+        if estado_g == 'Observado': 
+            bg_b, ft_b = '#fef3c7', '#d97706'
+        elif estado_g in ['Autorizado', 'Pagado', 'Aprobado Analista', 'Autorizado - Pendiente de Fondos']: 
+            bg_b, ft_b = '#d1fae5', '#065f46'
+        elif estado_g == 'Borrador': 
+            bg_b, ft_b = '#f1f5f9', '#475569'
+        else:
+            bg_b, ft_b = "#e0f2fe", '#0369a1'
 
         st.markdown(f"""
-            <div style='background-color: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;'>
+            <div style='background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 14px;'>
                 <span style='float: right; background-color: {bg_b}; color: {ft_b}; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold;'>{estado_g}</span>
-                <strong>RUT Emisor: {g['rut']}</strong> | <strong>Folio: {g['folio']}</strong> | Monto: ${g['monto']:,} | Emisión: {g['fecha_documento']}<br/>
-                <span style='color:#334155; font-size:14px;'>{g['justificacion']}</span>
+                <strong style='color: #ffffff; font-size: 15px;'>RUT Emisor: {g['rut']}</strong> <span style='color: #cbd5e1;'>|</span> <strong style='color: #ffffff; font-size: 15px;'>Folio: {g['folio']}</strong> <span style='color: #cbd5e1;'>|</span> <span style='color: #ffffff; font-weight: bold;'>Monto: ${g['monto']:,}</span> <span style='color: #cbd5e1;'>|</span> <span style='color: #e2e8f0;'>Emisión: {g['fecha_documento']}</span><br/>
+                <div style='margin-top: 6px; color: #ffffff; font-size: 14px; font-weight: 500;'>{g['justificacion']}</div>
+                {"<div style='margin-top: 4px; font-size: 12px; color: #ffffff;'>🕒 Procesado el: " + fecha_hora_accion + "</div>" if fecha_hora_accion else ""}
         """, unsafe_allow_html=True)
         
-        if estado_g == 'Borrador':
-            st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
-            if st.button(f"Editar Borrador Folio {g['folio']}", key=f"edit_borr_{g['id']}", type="secondary"):
-                st.session_state.gasto_editar_id = g['id']
-                st.session_state.val_rut = g['rut']
-                st.session_state.val_folio = g['folio']
-                st.session_state.val_monto_str = formatear_monto(g['monto'])
-                st.session_state.val_just = g['justificacion'].split(']')[-1].strip()
-                st.rerun()
+        if estado_g == "Borrador" and dias_restantes <= 0:
+            st.markdown(f"<p style='margin: 10px 0 0 0; font-size: 12px; color: #f87171; font-weight: bold;'>🛑 Plazo Expirado (Superó los 30 días límite desde su emisión)</p>", unsafe_allow_html=True)
+        elif estado_g == "Pendiente" or estado_g == 'Borrador':
+            st.markdown(f"<p style='margin: 10px 0 0 0; font-size: 12px; color: #fbbf24; font-weight: bold;'>⏳ Quedan {dias_restantes} días para procesar</p>", unsafe_allow_html=True)
+        elif estado_g == "Pagado":
+            # Informar visualmente al usuario el tiempo restante antes del borrado del historial
+            dias_para_borrar_pagado = 10 - antiguedad
+            if dias_para_borrar_pagado > 0:
+                st.markdown(f"<p style='margin: 10px 0 0 0; font-size: 12px; color: #64748b;'>🧹 Este registro se archivará en {dias_para_borrar_pagado} días</p>", unsafe_allow_html=True)
         
-        if estado_g == 'Observado' and g.get("comentario_auditoria"):
-            st.markdown(f'<div style="background-color: #fffbeb; padding: 10px; border-radius: 6px; margin: 8px 0; color: #b45309; font-size: 13px;">⚠️ <strong>Reparo Analista:</strong> {g["comentario_auditoria"]}</div>', unsafe_allow_html=True)
-            if st.button(f"Corregir Folio {g['folio']}", key=f"corr_{g['id']}"):
+        if g['estado'] == 'Borrador':
+            st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
+            col_acc1, col_acc2, _ = st.columns([1.5, 1, 4])
+            
+            with col_acc1:
+                if st.button(f"Editar Borrador Folio {g['folio']}", key=f"edit_borr_{g['id']}_{g['folio']}", type="secondary"):
+                    st.session_state.gasto_editar_id = g['id']
+                    st.session_state.val_rut = g['rut']
+                    st.session_state.val_folio = g['folio']
+                    st.session_state.val_monto_str = formatear_monto(g['monto'])
+                    st.session_state.val_just = g['justificacion'].split(']')[-1].strip()
+                    st.rerun()
+            with col_acc2:
+                if st.button(f"🗑️ Eliminar", key=f"del_borr_{g['id']}_{g['folio']}", type="primary"):
+                    repositorio.eliminar_rendicion(g['id'], g['folio'])
+                    st.rerun()
+        
+        if g['estado'] == 'Observado' and g.get("comentario_auditoria"):
+            st.markdown(f'<div style="background-color: #78350f; padding: 10px; border-radius: 6px; margin: 10px 0; color: #fef3c7; font-size: 13px;">⚠️ <strong>Reparo Analista:</strong> {g["comentario_auditoria"]}</div>', unsafe_allow_html=True)
+            if st.button(f"Corregir Folio {g['folio']}", key=f"corr_{g['id']}_{g['folio']}"):
                 st.session_state.gasto_editar_id = g['id']
                 st.session_state.val_rut = g['rut']
                 st.session_state.val_folio = g['folio']
@@ -306,11 +365,11 @@ def renderizar_vista(repositorio, caso_uso, usuario_activo):
                 st.session_state.val_just = g['justificacion'].split(']')[-1].strip()
                 st.rerun()
 
-        logs_g = repositorio.obtener_logs_por_rendicion(g['id'])
         if logs_g:
-            st.markdown("<p style='margin: 8px 0 2px 0; font-size: 11px; color: #94a3b8; font-weight:800;'>HISTORIAL DE TRAZABILIDAD (LOGS):</p>", unsafe_allow_html=True)
+            st.markdown("<p style='margin: 14px 0 4px 0; font-size: 11px; color: #94a3b8; font-weight:800;'>HISTORIAL DE TRAZABILIDAD (LOGS):</p>", unsafe_allow_html=True)
             for log in logs_g:
-               st.markdown(f"<p style='margin:0; font-size:11px; color:#64748b; font-family:monospace;'>• [{log['timestamp']}] Usuario '{log['autor']}' cambió estado de <strong>{log['estado_origen']}</strong> a <strong>{log['estado_destino']}</strong></p>", unsafe_allow_html=True)
+               st.markdown(f"<p style='margin:0; font-size:11px; color: #cbd5e1; font-family:monospace;'>• [{log['timestamp']}] Usuario '{log['autor']}' cambió estado de <strong>{log['estado_origen']}</strong> a <strong>{log['estado_destino']}</strong></p>", unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
+        
     st.markdown('</div>', unsafe_allow_html=True)
